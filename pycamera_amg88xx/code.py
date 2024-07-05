@@ -41,13 +41,13 @@ import displayio
 import math
 import struct
 import time
+from ulab import numpy as np
 
 pycam = adafruit_pycamera.PyCamera()
 amg = adafruit_amg88xx.AMG88XX(pycam._i2c)
 
 # AMG8833 has a 8x8 sensor
-SENSOR_SIZE_X = 8
-SENSOR_SIZE_Y = 8
+SENSOR_SIZE = 8
 
 # AMG8833 reports temperature values within range of 0-80C
 SENSOR_MIN_C = 0
@@ -57,10 +57,11 @@ SENSOR_MAX_C = 80
 THERMAL_BLOCK_SIZE = 30 # Prefer even numbers
 THERMAL_COLORS = 64
 THERMAL_FADE = 0.1
-thermal_raw = displayio.Bitmap(SENSOR_SIZE_X,SENSOR_SIZE_Y,65535)
 
-# Without interpolation, thermal_mapped is the same size as thermal_raw
-thermal_mapped = displayio.Bitmap(thermal_raw.width,thermal_raw.height,THERMAL_COLORS)
+thermal_sensor_data = np.array(range(SENSOR_SIZE**2)).reshape((SENSOR_SIZE, SENSOR_SIZE))
+
+interpolation_size = (SENSOR_SIZE*2)-1
+interpolation_grid = np.array(range(interpolation_size**2)).reshape((interpolation_size, interpolation_size)) / (interpolation_size**2)
 
 output_bitmap = displayio.Bitmap(pycam.display.width, pycam.display.height, 65535)
 
@@ -116,44 +117,30 @@ while True:
 
     read = time.monotonic_ns() >> 10
 
-    # Multiply so we can work in integer space via bitmap buffer.
-    # Also find min & max so we know range across them.
-    max_now = 0
-    min_now = SENSOR_MAX_C*100
-    scan_y = 0
-    for row in copy_pixels:
-        scan_x = 0
-        for temp in row:
-            # Turns 30.42 degrees C to 3042
-            temp_multiplied = math.floor(temp*100)
-            thermal_raw[scan_x,scan_y] = temp_multiplied
-            max_now = max(max_now, temp_multiplied)
-            min_now = min(min_now, temp_multiplied)
-            scan_x += 1
-        scan_y += 1
-    range_now = max_now - min_now
+    thermal_sensor_data = np.flip(np.array(copy_pixels), axis=0)
+
+    thermal_sensor_max  = np.max(thermal_sensor_data)
+    thermal_sensor_min  = np.min(thermal_sensor_data)
+    thermal_sensor_data = (thermal_sensor_data-thermal_sensor_min) / (thermal_sensor_max - thermal_sensor_min)
 
     scaled = time.monotonic_ns() >> 10
 
     # TODO: interplate 8x8 thermal_raw array to something bigger
     # https://learn.adafruit.com/adafruit-amg8833-8x8-thermal-camera-sensor/raspberry-pi-thermal-camera
+    # https://learn.adafruit.com/improved-amg8833-pygamer-thermal-camera
+    interpolation_grid[::2, ::2] = thermal_sensor_data
 
-    # Given the min/max values, we can map raw values across range of
-    # available values in color lookup table
-    for y in range(thermal_raw.height):
-        for x in range(thermal_raw.width):
-            if range_now > 100:
-                raw = thermal_raw[x,y]
-                raw = raw - min_now
-                raw = raw * THERMAL_COLORS
-                raw = raw // range_now
-                if raw < 1:
-                    raw = 1
-                elif raw >= THERMAL_COLORS:
-                    raw = THERMAL_COLORS-1
-                thermal_mapped[x,y] = raw
-            else:
-                thermal_mapped[x,y] = 0
+    """2x bilinear interpolation to upscale the sensor data array; by @v923z
+    and @David.Glaude."""
+    interpolation_grid[1::2, ::2] = thermal_sensor_data[:-1, :]
+    interpolation_grid[1::2, ::2] += thermal_sensor_data[1:, :]
+    interpolation_grid[1::2, ::2] /= 2
+    interpolation_grid[::, 1::2] = interpolation_grid[::, :-1:2]
+    interpolation_grid[::, 1::2] += interpolation_grid[::, 2::2]
+    interpolation_grid[::, 1::2] /= 2
+
+    # Map interpolated data to color palette
+    thermal_overlay = np.array(np.clip(interpolation_grid * THERMAL_COLORS,0,THERMAL_COLORS-1), dtype=np.int8)
 
     mapped = time.monotonic_ns() >> 10
 
@@ -164,11 +151,7 @@ while True:
     # Transfer thermal data, mapped via color table, into thermal overlay.
     for y in range(0,output_bitmap.height,4):
         for x in range(0,output_bitmap.width,4):
-            # Adjust for physical sensor orientation and field of view
-            x_lookup = y//THERMAL_BLOCK_SIZE
-            y_lookup = thermal_mapped.width-1-(x//THERMAL_BLOCK_SIZE)
-
-            output_bitmap[x,y]=thermal_color_lookup[thermal_mapped[x_lookup,y_lookup]]
+            output_bitmap[x,y]=thermal_color_lookup[thermal_overlay[x//16,y//16]]
 
     grid = time.monotonic_ns() >> 10
 
