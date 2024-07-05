@@ -155,16 +155,7 @@ while True:
 
     grid = time.monotonic_ns() >> 10
 
-    # pycam.blit() modified so it sends whole bitmap and not just viewfinder center
-    x_offset=0
-    y_offset=0
-    pycam._display_bus.send(
-        42, struct.pack(">hh", 80 + x_offset, 80 + x_offset + output_bitmap.width - 1)
-    )
-    pycam._display_bus.send(
-        43, struct.pack(">hh", y_offset, y_offset + output_bitmap.height - 1)
-    )
-    pycam._display_bus.send(44, output_bitmap)
+    pycam.blit(output_bitmap,0,0)
 
     refresh = time.monotonic_ns() >> 10
 
