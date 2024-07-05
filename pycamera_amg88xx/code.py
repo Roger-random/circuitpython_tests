@@ -50,39 +50,72 @@ SENSOR_MIN_C = 0
 SENSOR_MAX_C = 80
 
 # Allocate all buffers
-thermal_overlay = displayio.Bitmap(pycam.camera.width, pycam.camera.height, 65535)
-combined_view = displayio.Bitmap(pycam.camera.width, pycam.camera.height, 65535)
+THERMAL_BLOCK_SIZE = 30 # Prefer even numbers
+THERMAL_COLORS = 64
+THERMAL_FADE = 0.1
 thermal_raw = displayio.Bitmap(SENSOR_SIZE_X,SENSOR_SIZE_Y,65535)
+thermal_blockmap = displayio.Bitmap(THERMAL_COLORS*THERMAL_BLOCK_SIZE,THERMAL_BLOCK_SIZE,THERMAL_COLORS)
+thermal_palette = displayio.Palette(THERMAL_COLORS, dither=False)
+thermal_grid = displayio.TileGrid(bitmap=thermal_blockmap,
+                                  pixel_shader=thermal_palette,
+                                  width = pycam.display.width//THERMAL_BLOCK_SIZE,
+                                  height = pycam.display.height//THERMAL_BLOCK_SIZE,
+                                  tile_width = THERMAL_BLOCK_SIZE,
+                                  tile_height = THERMAL_BLOCK_SIZE)
 
-# Without interpolation, thermal_mapped is the same size
-thermal_mapped = displayio.Bitmap(thermal_raw.width,thermal_raw.height,65535)
+viewfinder_bitmap = displayio.Bitmap(pycam.camera.width, pycam.camera.height, 65535)
+viewfinder_grid = displayio.TileGrid(viewfinder_bitmap,
+                                     pixel_shader=displayio.ColorConverter(input_colorspace=displayio.Colorspace.RGB565_SWAPPED),
+                                     x = (pycam.display.width-pycam.camera.width)//2,
+                                     y = (pycam.display.height-pycam.camera.height)//2)
 
-# Build a color lookup table that covers the color range commonly
+display_group = displayio.Group()
+display_group.append(viewfinder_grid)
+display_group.append(thermal_grid)
+pycam.display.root_group = display_group
+
+# Without interpolation, thermal_mapped is the same size as thermal_raw
+thermal_mapped = displayio.Bitmap(thermal_raw.width,thermal_raw.height,THERMAL_COLORS)
+
+# Build a color palette that covers the color range commonly
 # used to convey temperature, conveniently half of hue wheel in
 # HSV (hue/saturation/value) colorspace.
 #
 # Coolest = blue -> purple -> red -> orange -> yellow = hottest
 print("Building color lookup table...")
+for color in range(THERMAL_COLORS):
+    color_fraction = color/THERMAL_COLORS
+    if color_fraction < THERMAL_FADE:
+        # Fade from blue to black
+        hue = -1/3
+        saturation = 1.0
+        value = (color_fraction/THERMAL_FADE)
+    elif color_fraction > (1-THERMAL_FADE):
+        # Glow from yellow to white
+        hue = 1/6
+        fade_fraction = color_fraction - (1-THERMAL_FADE)
+        saturation = (THERMAL_FADE-fade_fraction)/THERMAL_FADE
+        value = 1.0
+    else:
+        # Full saturation and full value, but with hue somewhere in the range
+        # of blue -> purple -> red -> orange -> yellow
+        # We want hue from +1/6 to -1/3
+        # Scale number to between 0.5 and 0.0
+        # Then drop by 1/3
+        hue_range = 1-(THERMAL_FADE*2)
+        hue = ((color_fraction-THERMAL_FADE)/(hue_range*2))-(1/3)
+        saturation = 1.0
+        value = 1.0
 
-# With an 8x8 sensor array, and in the absence of interpolation, we would
-# never need more than 8*8=64 distinct colors.
-COLORS=64
-color_lookup=[] # Can I preallocate it to be COLORS in size?
-
-for color in range(COLORS):
-    # We want hue from +1/6 to -1/3
-    # Scale number to between 0.5 and 0.0
-    # Then drop by 1/3
-    hue = (color/(COLORS*2))-(1/3)
     # Obtain hue from HSV spectrum, then convert to RGB with pack()
-    rgb = fancy.CHSV(hue).pack()
-    # Extract each color channel and drop lower bits
-    red =   (rgb & 0xFF0000) >> 19
-    green_h3 = (rgb & 0x00FF00) >> 13
-    green_l3 = (rgb & 0x003800) >> 11
-    blue =  (rgb & 0x0000FF) >> 3
-    # Pack bits into RGB565_SWAPPED format
-    color_lookup.append((red << 3) + (green_h3) + (green_l3 << 13) + (blue << 8))
+    thermal_palette[color] = fancy.CHSV(hue, saturation, value).pack()
+thermal_palette.make_transparent(0)
+
+# Draw tile set that will be used for overlay, using just-built palette
+thermal_blockmap.fill(0)
+for y in range(0,thermal_blockmap.height,2):
+    for x in range(0,thermal_blockmap.width,2):
+        thermal_blockmap[x,y] = x//THERMAL_BLOCK_SIZE
 
 print("Starting!")
 
@@ -104,38 +137,36 @@ while True:
         scan_y += 1
     range_now = max_now - min_now
 
-    # Clear overlay to black
-    thermal_overlay.fill(0)
+    # TODO: interplate 8x8 thermal_raw array to something bigger
+    # https://learn.adafruit.com/adafruit-amg8833-8x8-thermal-camera-sensor/raspberry-pi-thermal-camera
 
-    # Proceed only if we actually have a range of sensor values.
-    if (range_now > 0):
-        # TODO: interplate 8x8 thermal_raw array to something bigger
-        # https://learn.adafruit.com/adafruit-amg8833-8x8-thermal-camera-sensor/raspberry-pi-thermal-camera
-
-        # Given the min/max values, we can map raw values across range of
-        # available values in color lookup table
-        for y in range(thermal_raw.height):
-            for x in range(thermal_raw.width):
+    # Given the min/max values, we can map raw values across range of
+    # available values in color lookup table
+    for y in range(thermal_raw.height):
+        for x in range(thermal_raw.width):
+            if range_now > 100:
                 raw = thermal_raw[x,y]
                 raw = raw - min_now
-                raw = raw/range_now
-                mapped = math.floor(raw*(COLORS-1))
-                thermal_mapped[x,y] = color_lookup[mapped]
+                raw = raw * THERMAL_COLORS
+                raw = raw // range_now
+                if raw < 1:
+                    raw = 1
+                elif raw >= THERMAL_COLORS:
+                    raw = THERMAL_COLORS-1
+                thermal_mapped[x,y] = raw
+            else:
+                thermal_mapped[x,y] = 1
 
-        # Transfer thermal data, mapped via color table, into thermal overlay.
-        y_offset = math.floor((pycam.display.height - pycam.camera.height)/2)
-        x_offset = math.floor((pycam.display.width - pycam.camera.width)/2)
-        x_block_size = math.floor(pycam.display.width/SENSOR_SIZE_X)
-        y_block_size = math.floor(pycam.display.height/SENSOR_SIZE_Y)
-        for y in range(0,pycam.camera.height,4):
-            for x in range(0,pycam.camera.width,4):
-                # Adjust for physical sensor orientation and field of view
-                x_lookup = (y+y_offset)//y_block_size
-                y_lookup = SENSOR_SIZE_X-1-(x//x_block_size)
-                thermal_overlay[x,y] = thermal_mapped[x_lookup,y_lookup]
+    # Transfer thermal data, mapped via color table, into thermal overlay.
+    x_block_size = pycam.display.width//thermal_mapped.width
+    y_block_size = pycam.display.height//thermal_mapped.height
+    for y in range(thermal_grid.height):
+        for x in range(thermal_grid.width):
+            # Adjust for physical sensor orientation and field of view
+            x_lookup = (y*THERMAL_BLOCK_SIZE)//y_block_size
+            y_lookup = thermal_mapped.width-1-((x*THERMAL_BLOCK_SIZE)//x_block_size)
 
-    # Blend camera view with thermal overlay, and blit to screen
-    bitmaptools.alphablend(
-        combined_view, pycam.continuous_capture(), thermal_overlay, displayio.Colorspace.RGB565_SWAPPED
-    )
-    pycam.blit(combined_view)
+            thermal_grid[x,y]=thermal_mapped[x_lookup,y_lookup]
+
+    bitmaptools.blit(viewfinder_bitmap, pycam.continuous_capture(), 0, 0)
+    pycam.display.refresh()
