@@ -185,4 +185,4 @@ while True:
 
     refresh = time.monotonic_ns() >> 10
 
-    print("read {0} scaled {1} mapped {2} blit {3} grid {4} refresh {5} total {6}".format(read-start, scaled-read, mapped-scaled, blit-mapped, grid-blit, refresh-blit, refresh-start))
+    print("read {0} scaled {1} mapped {2} blit {3} grid {4} refresh {5} total {6}".format(read-start, scaled-read, mapped-scaled, blit-mapped, grid-blit, refresh-grid, refresh-start))
