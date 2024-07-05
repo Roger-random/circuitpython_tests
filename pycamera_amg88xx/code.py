@@ -29,6 +29,8 @@ by rendering a thermal overlay on top of Memento's camera viewfinder.
 Memento camera: https://www.adafruit.com/product/5420
 
 AMG8833 breakout board: https://www.adafruit.com/product/3538
+
+Created on CircuitPython 9.0.5
 """
 
 import adafruit_amg88xx
@@ -37,6 +39,7 @@ import adafruit_pycamera
 import bitmaptools
 import displayio
 import math
+import time
 
 pycam = adafruit_pycamera.PyCamera()
 amg = adafruit_amg88xx.AMG88XX(pycam._i2c)
@@ -120,12 +123,18 @@ for y in range(0,thermal_blockmap.height,2):
 print("Starting!")
 
 while True:
+    start = time.monotonic_ns() >> 10
+
+    copy_pixels = amg.pixels
+
+    read = time.monotonic_ns() >> 10
+
     # Multiply so we can work in integer space via bitmap buffer.
     # Also find min & max so we know range across them.
     max_now = 0
     min_now = SENSOR_MAX_C*100
     scan_y = 0
-    for row in amg.pixels:
+    for row in copy_pixels:
         scan_x = 0
         for temp in row:
             # Turns 30.42 degrees C to 3042
@@ -136,6 +145,8 @@ while True:
             scan_x += 1
         scan_y += 1
     range_now = max_now - min_now
+
+    scaled = time.monotonic_ns() >> 10
 
     # TODO: interplate 8x8 thermal_raw array to something bigger
     # https://learn.adafruit.com/adafruit-amg8833-8x8-thermal-camera-sensor/raspberry-pi-thermal-camera
@@ -157,6 +168,8 @@ while True:
             else:
                 thermal_mapped[x,y] = 1
 
+    mapped = time.monotonic_ns() >> 10
+
     # Transfer thermal data, mapped via color table, into thermal overlay.
     x_block_size = pycam.display.width//thermal_mapped.width
     y_block_size = pycam.display.height//thermal_mapped.height
@@ -168,5 +181,14 @@ while True:
 
             thermal_grid[x,y]=thermal_mapped[x_lookup,y_lookup]
 
+    grid = time.monotonic_ns() >> 10
+
     bitmaptools.blit(viewfinder_bitmap, pycam.continuous_capture(), 0, 0)
+
+    blit = time.monotonic_ns() >> 10
+
     pycam.display.refresh()
+
+    refresh = time.monotonic_ns() >> 10
+
+    print("read {0} scaled {1} mapped {2} grid {3} blit {4} refresh {5} total {6}".format(read-start, scaled-read, mapped-scaled, grid-mapped, blit-grid, refresh-blit, refresh-start))
