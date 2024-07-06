@@ -38,8 +38,6 @@ import adafruit_fancyled.adafruit_fancyled as fancy
 import adafruit_pycamera
 import bitmaptools
 import displayio
-import math
-import struct
 import time
 from ulab import numpy as np
 
@@ -48,25 +46,17 @@ amg = adafruit_amg88xx.AMG88XX(pycam._i2c)
 
 # AMG8833 has a 8x8 sensor
 SENSOR_SIZE = 8
+interpolation_size = (SENSOR_SIZE*2)-1
 
-# AMG8833 reports temperature values within range of 0-80C
-SENSOR_MIN_C = 0
-SENSOR_MAX_C = 80
-
-# Allocate all buffers
-THERMAL_BLOCK_SIZE = 30 # Prefer even numbers
+# Palette of colors representing thermal range
 THERMAL_COLORS = 64
 THERMAL_FADE = 0.1
 
+# Allocate memory for data structures
 thermal_sensor_data = np.array(range(SENSOR_SIZE**2)).reshape((SENSOR_SIZE, SENSOR_SIZE))
-
-interpolation_size = (SENSOR_SIZE*2)-1
 interpolation_grid = np.array(range(interpolation_size**2)).reshape((interpolation_size, interpolation_size)) / (interpolation_size**2)
-
 thermal_overlay = np.array(range(interpolation_size**2),dtype=np.uint16).reshape((interpolation_size, interpolation_size))
-
 output_bitmap = displayio.Bitmap(pycam.display.width, pycam.display.height, 65535)
-
 thermal_color_lookup = [] # How to pre-allocate to THERMAL_COLORS?
 
 # Build a color palette that covers the color range commonly
@@ -113,23 +103,24 @@ for color in range(THERMAL_COLORS):
 print("Starting!")
 
 while True:
-    start = time.monotonic_ns() >> 10
+    start = time.monotonic_ns() >> 10 # Performance measurement timestamp
 
-    copy_pixels = amg.pixels
+    # Each call to 'pixels' property getter triggers I2C operation to read from sensor.
+    sensor_pixels = amg.pixels
 
-    read = time.monotonic_ns() >> 10
+    read = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
-    # Flip to help adjust for physical sensor orientation
-    thermal_sensor_data = np.flip(np.array(copy_pixels), axis=0)
+    # np.flip adjust for physical sensor orientation
+    thermal_sensor_data = np.flip(np.array(sensor_pixels), axis=0)
 
+    # Scale temperature readings to values between 0.0 and 1.0
     thermal_sensor_max  = np.max(thermal_sensor_data)
     thermal_sensor_min  = np.min(thermal_sensor_data)
     thermal_sensor_data = (thermal_sensor_data-thermal_sensor_min) / (thermal_sensor_max - thermal_sensor_min)
 
-    scaled = time.monotonic_ns() >> 10
+    scaled = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
-    # TODO: interplate 8x8 thermal_raw array to something bigger
-    # https://learn.adafruit.com/adafruit-amg8833-8x8-thermal-camera-sensor/raspberry-pi-thermal-camera
+    # interplate 8x8 thermal_raw array to 15x15 thanks to
     # https://learn.adafruit.com/improved-amg8833-pygamer-thermal-camera
     interpolation_grid[::2, ::2] = thermal_sensor_data
 
@@ -142,6 +133,8 @@ while True:
     interpolation_grid[::, 1::2] += interpolation_grid[::, 2::2]
     interpolation_grid[::, 1::2] /= 2
 
+    interpolate = time.monotonic_ns() >> 10  # Performance measurement timestamp
+
     # Scale interpolated data to range of color palette index
     thermal_indices = np.array(np.clip(interpolation_grid * THERMAL_COLORS,0,THERMAL_COLORS-1), dtype=np.int8)
 
@@ -152,11 +145,12 @@ while True:
             # x,y mapped to inverted y,x to adjust for physical sensor orientation
             thermal_overlay[x,y] = thermal_color_lookup[thermal_indices[y,x]]
 
-    mapped = time.monotonic_ns() >> 10
+    mapped = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
+    # Grab a snapshot from OV5640 camera
     bitmaptools.blit(output_bitmap, pycam.continuous_capture(), 0, 32)
 
-    blit = time.monotonic_ns() >> 10
+    blit = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
     # Transfer thermal data, mapped via color table, into thermal overlay.
     output_bitmap_np = np.frombuffer(output_bitmap, dtype=np.uint16).reshape((240,240))
@@ -165,10 +159,11 @@ while True:
         for x in range(0,15,3):
             output_bitmap_np[x::16,y::16] = thermal_overlay
 
-    grid = time.monotonic_ns() >> 10
+    grid = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
     pycam.blit(output_bitmap,0,0)
 
-    refresh = time.monotonic_ns() >> 10
+    refresh = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
-    print("read {0} scaled {1} mapped {2} blit {3} grid {4} refresh {5} total {6}".format(read-start, scaled-read, mapped-scaled, blit-mapped, grid-blit, refresh-grid, refresh-start))
+    # Print performance timer deltas
+    # print("read {} scaled {} interpolated {} mapped {} blit {} grid {} refresh {} total {}".format(read-start, scaled-read, interpolate-scaled, mapped-interpolate, blit-mapped, grid-blit, refresh-grid, refresh-start))
