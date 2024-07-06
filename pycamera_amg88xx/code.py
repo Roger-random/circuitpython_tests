@@ -63,6 +63,8 @@ thermal_sensor_data = np.array(range(SENSOR_SIZE**2)).reshape((SENSOR_SIZE, SENS
 interpolation_size = (SENSOR_SIZE*2)-1
 interpolation_grid = np.array(range(interpolation_size**2)).reshape((interpolation_size, interpolation_size)) / (interpolation_size**2)
 
+thermal_overlay = np.array(range(interpolation_size**2),dtype=np.uint16).reshape((interpolation_size, interpolation_size))
+
 output_bitmap = displayio.Bitmap(pycam.display.width, pycam.display.height, 65535)
 
 thermal_color_lookup = [] # How to pre-allocate to THERMAL_COLORS?
@@ -117,6 +119,7 @@ while True:
 
     read = time.monotonic_ns() >> 10
 
+    # Flip to help adjust for physical sensor orientation
     thermal_sensor_data = np.flip(np.array(copy_pixels), axis=0)
 
     thermal_sensor_max  = np.max(thermal_sensor_data)
@@ -139,8 +142,15 @@ while True:
     interpolation_grid[::, 1::2] += interpolation_grid[::, 2::2]
     interpolation_grid[::, 1::2] /= 2
 
-    # Map interpolated data to color palette
-    thermal_overlay = np.array(np.clip(interpolation_grid * THERMAL_COLORS,0,THERMAL_COLORS-1), dtype=np.int8)
+    # Scale interpolated data to range of color palette index
+    thermal_indices = np.array(np.clip(interpolation_grid * THERMAL_COLORS,0,THERMAL_COLORS-1), dtype=np.int8)
+
+    # Then map color indices to colors in the palette
+    # TODO: Figure out how to do this faster via numpy.
+    for y in range(thermal_overlay.shape[0]):
+        for x in range(thermal_overlay.shape[1]):
+            # x,y mapped to inverted y,x to adjust for physical sensor orientation
+            thermal_overlay[x,y] = thermal_color_lookup[thermal_indices[y,x]]
 
     mapped = time.monotonic_ns() >> 10
 
@@ -149,9 +159,11 @@ while True:
     blit = time.monotonic_ns() >> 10
 
     # Transfer thermal data, mapped via color table, into thermal overlay.
-    for y in range(0,output_bitmap.height,4):
-        for x in range(0,output_bitmap.width,4):
-            output_bitmap[x,y]=thermal_color_lookup[thermal_overlay[x//16,y//16]]
+    output_bitmap_np = np.frombuffer(output_bitmap, dtype=np.uint16).reshape((240,240))
+
+    for y in range(0,15,3):
+        for x in range(0,15,3):
+            output_bitmap_np[x::16,y::16] = thermal_overlay
 
     grid = time.monotonic_ns() >> 10
 
