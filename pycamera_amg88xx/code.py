@@ -53,10 +53,8 @@ THERMAL_COLORS = 64
 THERMAL_FADE = 0.1
 
 # Allocate memory for data structures
-thermal_sensor_data = np.array(range(SENSOR_SIZE**2)).reshape((SENSOR_SIZE, SENSOR_SIZE))
-interpolation_grid = np.array(range(interpolation_size**2)).reshape((interpolation_size, interpolation_size)) / (interpolation_size**2)
-thermal_overlay = np.array(range(interpolation_size**2),dtype=np.uint16).reshape((interpolation_size, interpolation_size))
-thermal_overlay_expanded = np.zeros((interpolation_size*4,interpolation_size*4),dtype=np.uint16)
+interpolation_grid = np.zeros((interpolation_size, interpolation_size))
+thermal_overlay_repeated = np.zeros((interpolation_size*4,interpolation_size*4), dtype=np.uint16)
 output_bitmap = displayio.Bitmap(pycam.display.width, pycam.display.height, 65535)
 thermal_color_lookup = [] # How to pre-allocate to THERMAL_COLORS?
 
@@ -139,13 +137,32 @@ while True:
     interpolate = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
     # Scale interpolated data to range of color palette index
-    thermal_indices = np.array(np.clip(interpolation_grid * THERMAL_COLORS,0,THERMAL_COLORS-1), dtype=np.int8)
+    thermal_indices = np.array(np.clip(interpolation_grid * THERMAL_COLORS,0,THERMAL_COLORS-1), dtype=np.uint8)
 
-    # Then map color indices to colors in the palette
-    # TODO: Figure out how to do this faster via numpy.
-    for y in range(thermal_overlay.shape[0]):
-        for x in range(thermal_overlay.shape[1]):
-            thermal_overlay[x,y] = thermal_color_lookup[thermal_indices[x,y]]
+    # This utterly inscrutible chunk of code generates an array of colors as
+    # our thermal overlay. It maps just-calculated thermal color indices to
+    # actual colors in in the thermal color lookup list.
+    #
+    # Earlier version may be easier to understand conceptually:
+    #
+    #   for y:
+    #     for x:
+    #       thermal_overlay[x,y] = thermal_color_lookup[thermal_indices[x,y]]
+    #
+    # But that nested loop ran order of magnitude slower than code below:
+    #
+    #   1. Flatten square array of thermal indices to a linear list.
+    #   2. Generate a list comprehension using that array as index for color.
+    #      https://docs.python.org/3/tutorial/datastructures.html#list-comprehensions
+    #      (Personally dislike list comprehension on code readability grounds,
+    #       using it for the sake of performance, under protest.)
+    #   3. Create a NumPy array from the list comprehension.
+    #   4. Rearrange that one-dimensional array back into a square.
+    thermal_overlay = np.array(
+        [thermal_color_lookup[i] for i in \
+            thermal_indices.reshape((interpolation_size**2))], \
+        dtype=np.uint16) \
+        .reshape((interpolation_size, interpolation_size))
 
     mapped = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
@@ -155,19 +172,22 @@ while True:
     blit = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
     # Expand thermal overlay by 4X along both axis in preparation for bulk transfer.
-    # On full NumPy this is np.repeat(np.repeat(thermal_overlay,4,axis=0),4,axis=1)
-    # But there is no ulab.numpy.repeat()
-    thermal_overlay_expanded[::4,::4] = thermal_overlay
-    thermal_overlay_expanded[2::4,::4] = thermal_overlay
-    thermal_overlay_expanded[1::2,::4] = thermal_overlay_expanded[::2,::4]
-    thermal_overlay_expanded[:,2::4] = thermal_overlay_expanded[:,::4]
-    thermal_overlay_expanded[:,1::2] = thermal_overlay_expanded[:,::2]
+    # On full NumPy this can be accomplished via
+    #
+    #   thermal_overlay_repeated = np.repeat(np.repeat(thermal_overlay,4,axis=0),4,axis=1)
+    #
+    # But there is no ulab.numpy.repeat() so this copies bits the long way.
+    thermal_overlay_repeated[::4,::4] = thermal_overlay
+    thermal_overlay_repeated[2::4,::4] = thermal_overlay
+    thermal_overlay_repeated[1::2,::4] = thermal_overlay_repeated[::2,::4]
+    thermal_overlay_repeated[:,2::4] = thermal_overlay_repeated[:,::4]
+    thermal_overlay_repeated[:,1::2] = thermal_overlay_repeated[:,::2]
 
     # Generate a NumPy view of OV5640 camera sensor data bitmap
     output_bitmap_np = np.frombuffer(output_bitmap, dtype=np.uint16).reshape((240,240))
 
     # Bulk transfer thermal overlay
-    output_bitmap_np[::4,::4] = thermal_overlay_expanded
+    output_bitmap_np[::4,::4] = thermal_overlay_repeated
 
     grid = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
