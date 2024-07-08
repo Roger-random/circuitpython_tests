@@ -56,6 +56,7 @@ THERMAL_FADE = 0.1
 thermal_sensor_data = np.array(range(SENSOR_SIZE**2)).reshape((SENSOR_SIZE, SENSOR_SIZE))
 interpolation_grid = np.array(range(interpolation_size**2)).reshape((interpolation_size, interpolation_size)) / (interpolation_size**2)
 thermal_overlay = np.array(range(interpolation_size**2),dtype=np.uint16).reshape((interpolation_size, interpolation_size))
+thermal_overlay_expanded = np.zeros((interpolation_size*4,interpolation_size*4),dtype=np.uint16)
 output_bitmap = displayio.Bitmap(pycam.display.width, pycam.display.height, 65535)
 thermal_color_lookup = [] # How to pre-allocate to THERMAL_COLORS?
 
@@ -153,18 +154,26 @@ while True:
 
     blit = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
-    # Transfer thermal data, mapped via color table, into thermal overlay.
+    # Expand thermal overlay by 4X along each axis in preparation for bulk transfer.
+    # (Feels like there should be an existing NumPy function to handle this?)
+    thermal_overlay_expanded[::4,::4] = thermal_overlay
+    thermal_overlay_expanded[2::4,::4] = thermal_overlay
+    thermal_overlay_expanded[1::2,::4] = thermal_overlay_expanded[::2,::4]
+    thermal_overlay_expanded[:,2::4] = thermal_overlay_expanded[:,::4]
+    thermal_overlay_expanded[:,1::2] = thermal_overlay_expanded[:,::2]
+
+    # Generate a NumPy view of OV5640 camera sensor data bitmap
     output_bitmap_np = np.frombuffer(output_bitmap, dtype=np.uint16).reshape((240,240))
 
-    for y in range(0,15,3):
-        for x in range(0,15,3):
-            output_bitmap_np[x::16,y::16] = thermal_overlay
+    # Bulk transfer thermal overlay
+    output_bitmap_np[::4,::4] = thermal_overlay_expanded
 
     grid = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
+    # Send results of all our hard work to screen
     pycam.blit(output_bitmap,0,0)
 
     refresh = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
     # Print performance timer deltas
-    # print("read {} scaled {} interpolated {} mapped {} blit {} grid {} refresh {} total {}".format(read-start, scaled-read, interpolate-scaled, mapped-interpolate, blit-mapped, grid-blit, refresh-grid, refresh-start))
+    print("read {} scaled {} interpolated {} mapped {} blit {} grid {} refresh {} total {}".format(read-start, scaled-read, interpolate-scaled, mapped-interpolate, blit-mapped, grid-blit, refresh-grid, refresh-start))
