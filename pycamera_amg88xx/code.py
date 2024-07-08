@@ -154,8 +154,9 @@ while True:
 
     blit = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
-    # Expand thermal overlay by 4X along each axis in preparation for bulk transfer.
-    # (Feels like there should be an existing NumPy function to handle this?)
+    # Expand thermal overlay by 4X along both axis in preparation for bulk transfer.
+    # On full NumPy this is np.repeat(np.repeat(thermal_overlay,4,axis=0),4,axis=1)
+    # But there is no ulab.numpy.repeat()
     thermal_overlay_expanded[::4,::4] = thermal_overlay
     thermal_overlay_expanded[2::4,::4] = thermal_overlay
     thermal_overlay_expanded[1::2,::4] = thermal_overlay_expanded[::2,::4]
