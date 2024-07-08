@@ -102,6 +102,9 @@ for color in range(THERMAL_COLORS):
 
 print("Starting!")
 
+# Switch camera to black & white mode so all colors mean temperature
+pycam.effect = pycam.effects.index("B&W")
+
 while True:
     start = time.monotonic_ns() >> 10 # Performance measurement timestamp
 
