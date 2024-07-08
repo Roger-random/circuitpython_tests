@@ -110,8 +110,7 @@ while True:
 
     read = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
-    # np.flip adjust for physical sensor orientation
-    thermal_sensor_data = np.flip(np.array(sensor_pixels), axis=0)
+    thermal_sensor_data = np.array(sensor_pixels)
 
     # Scale temperature readings to values between 0.0 and 1.0
     thermal_sensor_max  = np.max(thermal_sensor_data)
@@ -142,8 +141,7 @@ while True:
     # TODO: Figure out how to do this faster via numpy.
     for y in range(thermal_overlay.shape[0]):
         for x in range(thermal_overlay.shape[1]):
-            # x,y mapped to inverted y,x to adjust for physical sensor orientation
-            thermal_overlay[x,y] = thermal_color_lookup[thermal_indices[y,x]]
+            thermal_overlay[x,y] = thermal_color_lookup[thermal_indices[x,y]]
 
     mapped = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
