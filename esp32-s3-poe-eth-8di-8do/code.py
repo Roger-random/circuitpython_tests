@@ -23,10 +23,10 @@ SOFTWARE.
 """
 
 """
-Waveshare ESP32-S3_POE-ETH-8DI-8DO Exploration
+Waveshare ESP32-S3-POE-ETH-8DI-8DO Exploration
 
 On the wiki page for this product, Waveshare published example 01_MAIN_WIFI_AP
-which is a bit of an "Everything App" that exercises all of the functionality
+which is an "Everything App" that exercises all of the functionality
 on board. It sets up a WiFi access point and, once connected, serves up a HTML
 control panel that lets the user do things like toggle output pins.
 https://www.waveshare.com/wiki/ESP32-S3-POE-ETH-8DI-8DO#01_MAIN_WIFI_AP
@@ -57,9 +57,25 @@ Reusability by other projects:
 
 """
 As of this writing there is no CircuitPython built binary specific to the
-ESP32-S3_POE-ETH-8DI-8DO. I'm using the binary built for ESP32-S3 ETH board
-and have not yet encountered any problems.
+ESP32-S3-POE-ETH-8DI-8DO. I'm using the binary built for ESP32-S3 ETH board
+and it is enough to get started with exploration.
 https://circuitpython.org/board/waveshare_esp32_s3_eth/
+
+However, many attributes of the associated 'board' library is not applicable
+because it is a different board.
 """
 
-print("Waveshare ESP32-S3_POE-ETH-8DI-8DO Exploration")
+import board
+import time
+
+import neopixel  # Requires lib/neopixel.mpy from Adafruit library bundle
+
+pixels = neopixel.NeoPixel(
+    board.IO38, 1, brightness=1.0, auto_write=False, pixel_order=neopixel.GRB
+)
+
+while True:
+    pixels.fill((255, 0, 0))
+    time.sleep(0.5)
+    pixels.fill((0, 255, 0))
+    time.sleep(0.5)
