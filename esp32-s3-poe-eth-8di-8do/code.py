@@ -57,12 +57,14 @@ Reusability by other projects:
 
 """
 As of this writing there is no CircuitPython built binary specific to the
-ESP32-S3-POE-ETH-8DI-8DO. I'm using the binary built for ESP32-S3 ETH board
-and it is enough to get started with exploration.
-https://circuitpython.org/board/waveshare_esp32_s3_eth/
+ESP32-S3-POE-ETH-8DI-8DO. I'm using the binary built for one of the ESP32-S3
+dev boards and it seems to be good enough to get started with exploration.
+https://circuitpython.org/board/espressif_esp32s3_devkitc_1_n8r8/
 
-However, many attributes of the associated 'board' library is not applicable
-because it is a different board.
+Though many attributes of the associated 'board' library are wrong because
+it is a different board.
+    Constant            Declared    Actual
+    board.NEOPIXEL      IO48        IO38
 """
 
 import board
@@ -71,11 +73,19 @@ import time
 import neopixel  # Requires lib/neopixel.mpy from Adafruit library bundle
 
 pixels = neopixel.NeoPixel(
-    board.IO38, 1, brightness=1.0, auto_write=False, pixel_order=neopixel.GRB
+    board.IO38, 1, brightness=0.2, auto_write=False, pixel_order=neopixel.GRB
 )
 
 while True:
-    pixels.fill((255, 0, 0))
+    pixels[0] = (64, 0, 0)
+    pixels.show()
     time.sleep(0.5)
-    pixels.fill((0, 255, 0))
+    pixels[0] = (0, 64, 0)
+    pixels.show()
+    time.sleep(0.5)
+    pixels[0] = (0, 0, 64)
+    pixels.show()
+    time.sleep(0.5)
+    pixels[0] = (0, 0, 0)
+    pixels.show()
     time.sleep(0.5)
