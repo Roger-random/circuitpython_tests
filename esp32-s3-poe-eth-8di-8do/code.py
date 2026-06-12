@@ -72,20 +72,14 @@ import time
 
 import neopixel  # Requires lib/neopixel.mpy from Adafruit library bundle
 
-pixels = neopixel.NeoPixel(
-    board.IO38, 1, brightness=0.2, auto_write=False, pixel_order=neopixel.GRB
-)
+pixels = neopixel.NeoPixel(board.IO38, 1, brightness=0.2, pixel_order=neopixel.GRB)
 
 while True:
     pixels[0] = (64, 0, 0)
-    pixels.show()
     time.sleep(0.5)
     pixels[0] = (0, 64, 0)
-    pixels.show()
     time.sleep(0.5)
     pixels[0] = (0, 0, 64)
-    pixels.show()
     time.sleep(0.5)
     pixels[0] = (0, 0, 0)
-    pixels.show()
     time.sleep(0.5)
