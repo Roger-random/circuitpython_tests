@@ -119,9 +119,20 @@ class buzzer:
         """
         Creates a PWM class with 50% duty cycle and variable frequency
         """
+
+        # Duty cycle is specified as a 16-bit value. 0 is 0% and 65535 is 100%
+        # so 2^15 or 32768 represents 50% duty cycle
         self.duty50 = 2**15
+
+        # Create the PWM object running at zero duty cycle (no sound) until
+        # tone() is called. Not sure if frequency is important when duty cycle
+        # is zero but set it to middle_C just in case.
+        # variable_frequency must be TRUE for us to adjust tone afterwards.
         self.buzz = pwmio.PWMOut(
-            board2.BUZZER, duty_cycle=0, frequency=261, variable_frequency=True
+            board2.BUZZER,
+            duty_cycle=0,
+            frequency=self.middle_C,
+            variable_frequency=True,
         )
 
     def tone(self, frequency):
