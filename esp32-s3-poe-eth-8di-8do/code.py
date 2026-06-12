@@ -64,6 +64,10 @@ https://circuitpython.org/board/espressif_esp32s3_devkitc_1_n8r8/
 Since this is a dev board, there aren't many predefined pins. dir(board) shows
 just NEOPIXEL, RX, and TX. Serial RX(44) and TX(43) seems to match but NEOPIXEL
 differs. The dev board has it on IO48 and ESP32-S3-POE-ETH-8DI-8DO uses IO38.
+
+I've defined a supporting 'board2' class to label such pins. If I embark on a
+project to provide actual CircuitPython prebuilt binary support, 'board2' is
+what 'board' will look like.
 """
 
 import board
@@ -71,14 +75,16 @@ import time
 
 import neopixel  # Requires lib/neopixel.mpy from Adafruit library bundle
 
-pixels = neopixel.NeoPixel(board.IO38, 1, brightness=0.2, pixel_order=neopixel.GRB)
+from esp32_s3_poe_eth_8di_8do import rgb_led
+
+led = rgb_led()
 
 while True:
-    pixels[0] = (64, 0, 0)
-    time.sleep(0.5)
-    pixels[0] = (0, 64, 0)
-    time.sleep(0.5)
-    pixels[0] = (0, 0, 64)
-    time.sleep(0.5)
-    pixels[0] = (0, 0, 0)
-    time.sleep(0.5)
+    led.rgb((16, 0, 0))
+    time.sleep(0.75)
+    led.rgb((0, 16, 0))
+    time.sleep(0.75)
+    led.rgb((0, 0, 16))
+    time.sleep(0.75)
+    led.rgb((0, 0, 0))
+    time.sleep(0.75)
