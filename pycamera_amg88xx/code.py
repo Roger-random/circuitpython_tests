@@ -197,4 +197,4 @@ while True:
     refresh = time.monotonic_ns() >> 10  # Performance measurement timestamp
 
     # Print performance timer deltas
-    print("read {} scaled {} interpolated {} mapped {} blit {} grid {} refresh {} total {}".format(read-start, scaled-read, interpolate-scaled, mapped-interpolate, blit-mapped, grid-blit, refresh-grid, refresh-start))
+    # print("read {} scaled {} interpolated {} mapped {} blit {} grid {} refresh {} total {}".format(read-start, scaled-read, interpolate-scaled, mapped-interpolate, blit-mapped, grid-blit, refresh-grid, refresh-start))
