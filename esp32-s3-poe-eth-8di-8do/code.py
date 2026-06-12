@@ -76,15 +76,21 @@ import time
 import neopixel  # Requires lib/neopixel.mpy from Adafruit library bundle
 
 from esp32_s3_poe_eth_8di_8do import rgb_led
+from esp32_s3_poe_eth_8di_8do import buzzer
 
 led = rgb_led()
+buz = buzzer()
 
 while True:
     led.rgb((16, 0, 0))
+    buz.tone(buzzer.middle_C)
     time.sleep(0.75)
     led.rgb((0, 16, 0))
+    buz.tone(buzzer.middle_D)
     time.sleep(0.75)
     led.rgb((0, 0, 16))
+    buz.tone(buzzer.middle_E)
     time.sleep(0.75)
     led.rgb((0, 0, 0))
+    buz.stop()
     time.sleep(0.75)

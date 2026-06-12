@@ -34,6 +34,8 @@ https://www.waveshare.com/esp32-s3-poe-eth-8di-8do.htm
 
 import board
 
+import pwmio  # Introduced to pulse piezo buzzer
+
 # Support for 'rgbled' class requires 'neopixel.mpy' file to be copied into
 # /lib from the Adafruit library bundle.
 import neopixel
@@ -95,3 +97,42 @@ class rgb_led:
 
     def show(self):
         self.pixel.show()
+
+
+class buzzer:
+    """
+    A piezo buzzer is on board and available to generate audio feedback.
+    """
+
+    # Predefine frequencies for one octave from middle C to tenor C
+    # https://en.wikipedia.org/wiki/Piano_key_frequencies
+    middle_C = 261
+    middle_D = 294
+    middle_E = 329
+    middle_F = 349
+    middle_G = 392
+    middle_A = 440
+    middle_B = 493
+    tenor_C = 523
+
+    def __init__(self):
+        """
+        Creates a PWM class with 50% duty cycle and variable frequency
+        """
+        self.duty50 = 2**15
+        self.buzz = pwmio.PWMOut(
+            board2.BUZZER, duty_cycle=0, frequency=261, variable_frequency=True
+        )
+
+    def tone(self, frequency):
+        """
+        Turn the buzzer on to 50% duty cycle and specified frequency
+        """
+        self.buzz.frequency = frequency
+        self.buzz.duty_cycle = self.duty50
+
+    def stop(self):
+        """
+        Stop the buzzer by turning duty cycle to 0%
+        """
+        self.buzz.duty_cycle = 0
