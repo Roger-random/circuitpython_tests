@@ -73,24 +73,25 @@ what 'board' will look like.
 import board
 import time
 
-import neopixel  # Requires lib/neopixel.mpy from Adafruit library bundle
-
 from esp32_s3_poe_eth_8di_8do import rgb_led
-from esp32_s3_poe_eth_8di_8do import buzzer
+from esp32_s3_poe_eth_8di_8do import digital_inputs
 
 led = rgb_led()
-buz = buzzer()
+
+din = digital_inputs()
+
+prev_input3 = din.get_value(3)
 
 while True:
     led.rgb((16, 0, 0))
-    buz.tone(buzzer.middle_C)
-    time.sleep(0.75)
-    led.rgb((0, 16, 0))
-    buz.tone(buzzer.middle_D)
-    time.sleep(0.75)
-    led.rgb((0, 0, 16))
-    buz.tone(buzzer.middle_E)
-    time.sleep(0.75)
+    time.sleep(0.1)
     led.rgb((0, 0, 0))
-    buz.stop()
-    time.sleep(0.75)
+    time.sleep(0.1)
+    din.update()
+
+    if prev_input3 != din.get_value(3):
+        prev_input3 = din.get_value(3)
+        if prev_input3:
+            print("Input port 3 ACTIVE")
+        else:
+            print("Input port 3 inactive")

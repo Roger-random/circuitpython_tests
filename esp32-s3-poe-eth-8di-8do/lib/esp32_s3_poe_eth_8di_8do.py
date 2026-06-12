@@ -34,11 +34,12 @@ https://www.waveshare.com/esp32-s3-poe-eth-8di-8do.htm
 
 import board
 
-import pwmio  # Introduced to pulse piezo buzzer
+# Base libraries and why they were introduced
+import pwmio  # To pulse piezo buzzer
+import keypad  # To debounce input ports
 
-# Support for 'rgbled' class requires 'neopixel.mpy' file to be copied into
-# /lib from the Adafruit library bundle.
-import neopixel
+# Additional librarie files from the Adafruit library bundle
+import neopixel  # neopixel.mpy for rgb_led class
 
 
 class board2:
@@ -57,6 +58,14 @@ class board2:
     the 'board' class but I'm too much of a Python novice to know of it.
     """
 
+    IN1 = board.IO4
+    IN2 = board.IO5
+    IN3 = board.IO6
+    IN4 = board.IO7
+    IN5 = board.IO8
+    IN6 = board.IO9
+    IN7 = board.IO10
+    IN8 = board.IO11
     RGB_LED = board.IO38  # Single WS2812 (or compatible) RGB LED
     NEOPIXEL = board.IO38  # "NeoPixel" is Adafruit branding for WS2812
     BUZZER = board.IO46  # Piezo buzzer for audio feedback.
@@ -147,3 +156,54 @@ class buzzer:
         Stop the buzzer by turning duty cycle to 0%
         """
         self.buzz.duty_cycle = 0
+
+
+class digital_inputs:
+    """
+    Eight digital input ports with bidirectional optocoupler isolation are
+    connected to eight ESP32-S3 GPIO pins. Uses the CircuitPython keypad class
+    to handle debouncing.
+    """
+
+    def __init__(self):
+        self.input_ports = keypad.Keys(
+            (
+                board2.IN1,
+                board2.IN2,
+                board2.IN3,
+                board2.IN4,
+                board2.IN5,
+                board2.IN6,
+                board2.IN7,
+                board2.IN8,
+            ),
+            value_when_pressed=False,
+            pull=True,
+        )
+        self.input_value: int = 0x00
+
+    def update(self) -> int:
+        previous_value = self.input_value
+        input_event = self.input_ports.events.get()
+        while input_event:
+            bit_mask = 0x1 << input_event.key_number
+            if input_event.pressed:
+                self.input_value |= bit_mask
+            else:
+                self.input_value &= ~bit_mask
+            input_event = self.input_ports.events.get()
+        if self.input_value != previous_value:
+            # print(f"New value {self.input_value:#04X}") # Debug
+            # TODO: Raise changed event
+            pass
+        return self.input_value
+
+    def get_value(self, port_number: int) -> bool:
+        if port_number in range(1, 9):
+            bit_mask = 0x1 << (port_number - 1)
+            return (self.input_value & bit_mask) != 0
+        else:
+            raise ValueError("Port number must be 1 through 8 inclusive")
+
+    def get_inputs_as_byte(self) -> int:
+        return self.input_value
