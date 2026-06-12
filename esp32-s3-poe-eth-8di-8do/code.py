@@ -61,10 +61,9 @@ ESP32-S3-POE-ETH-8DI-8DO. I'm using the binary built for one of the ESP32-S3
 dev boards and it seems to be good enough to get started with exploration.
 https://circuitpython.org/board/espressif_esp32s3_devkitc_1_n8r8/
 
-Though many attributes of the associated 'board' library are wrong because
-it is a different board.
-    Constant            Declared    Actual
-    board.NEOPIXEL      IO48        IO38
+Since this is a dev board, there aren't many predefined pins. dir(board) shows
+just NEOPIXEL, RX, and TX. Serial RX(44) and TX(43) seems to match but NEOPIXEL
+differs. The dev board has it on IO48 and ESP32-S3-POE-ETH-8DI-8DO uses IO38.
 """
 
 import board
