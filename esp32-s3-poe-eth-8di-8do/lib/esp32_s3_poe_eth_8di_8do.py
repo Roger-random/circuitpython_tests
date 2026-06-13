@@ -37,9 +37,12 @@ import board
 # Base libraries and why they were introduced
 import pwmio  # To pulse piezo buzzer
 import keypad  # To debounce input ports
+import busio  # I2C bus library for digital output ports
 
-# Additional librarie files from the Adafruit library bundle
+# Additional files from the CircuitPython Library Bundle copied to /lib
+# https://circuitpython.org/libraries
 import neopixel  # neopixel.mpy for rgb_led class
+import adafruit_pca9554  # adafruit_pca9554.mpy for digital output ports
 
 
 class board2:
@@ -68,7 +71,12 @@ class board2:
     IN8 = board.IO11
     RGB_LED = board.IO38  # Single WS2812 (or compatible) RGB LED
     NEOPIXEL = board.IO38  # "NeoPixel" is Adafruit branding for WS2812
+    SCL = board.IO41  # I2C clock
+    SDA = board.IO42  # I2C data
     BUZZER = board.IO46  # Piezo buzzer for audio feedback.
+
+    I2C = busio.I2C(SCL, SDA)  # Singleton I2C instance
+    TCA9554_ADDR = 0x20  # I2C address of TCA9554 chip for digital output ports
 
 
 class rgb_led:
@@ -105,6 +113,9 @@ class rgb_led:
         self.pixel[0] = rgb_tuple
 
     def show(self):
+        """
+        If auto_write was set to False, need to call this to update pixel
+        """
         self.pixel.show()
 
 
@@ -183,6 +194,10 @@ class digital_inputs:
         self.input_value: int = 0x00
 
     def update(self) -> int:
+        """
+        Process any queued up input state change events and update the
+        internal state accordingly.
+        """
         previous_value = self.input_value
         input_event = self.input_ports.events.get()
         while input_event:
@@ -199,11 +214,50 @@ class digital_inputs:
         return self.input_value
 
     def get_value(self, port_number: int) -> bool:
+        """
+        Returns the value of the specified input port
+        """
         if port_number in range(1, 9):
             bit_mask = 0x1 << (port_number - 1)
             return (self.input_value & bit_mask) != 0
         else:
             raise ValueError("Port number must be 1 through 8 inclusive")
 
-    def get_inputs_as_byte(self) -> int:
+    def get_all_values(self) -> int:
+        """
+        Read value of all eight input ports as a single byte
+        """
         return self.input_value
+
+
+class digital_outputs:
+    """
+    Eight digital output ports are controlled by a TCA9554PWR I2C I/O expander
+    chip at I2C address 0x20.
+    https://www.ti.com/product/TCA9554/part-details/TCA9554PWR
+
+    There's no TCA9554 CircuitPython class, but there is one for PCA9554.
+    TI's page for PCA9554 says TCA9554 is a newer version and a drop-in
+    replacement for PCA9554.
+    https://www.ti.com/product/PCA9554
+
+    So let's use the PCA9554 driver.
+    """
+
+    def __init__(self):
+        self.expander = adafruit_pca9554.PCA9554(
+            board2.I2C, address=board2.TCA9554_ADDR
+        )
+        # Tell the driver class all eight pins are outputs
+        self.expander.write_gpio(adafruit_pca9554.CONFIGPORT, 0x00)
+        # Set all outputs to open circuit
+        self.expander.write_gpio(adafruit_pca9554.OUTPUTPORT, 0xFF)
+
+    def open_output_circuit(self, pin: int, open: bool) -> None:
+        # It appears the circuit is set up so "True" is open circuit and
+        # "False" closes circuit to ground. So in order to close the circuit
+        # and turn on whatever is connected to this port, we have to pass
+        # in "False" for value of parameter "open".
+        #
+        # Somewhat counterintuitive but that's how the circuit works.
+        self.expander.write_pin(pin, open)

@@ -70,28 +70,33 @@ project to provide actual CircuitPython prebuilt binary support, 'board2' is
 what 'board' will look like.
 """
 
-import board
 import time
 
 from esp32_s3_poe_eth_8di_8do import rgb_led
-from esp32_s3_poe_eth_8di_8do import digital_inputs
+from esp32_s3_poe_eth_8di_8do import digital_outputs
 
 led = rgb_led()
 
-din = digital_inputs()
+dout = digital_outputs()
 
-prev_input3 = din.get_value(3)
+counter = 0
+
+
+def increment_counter(counter: int) -> int:
+    if counter == 255:
+        counter = 0
+    else:
+        counter += 1
+    print(counter)
+    for bit in range(8):
+        val = ((counter >> bit) & 0x1) == 0
+        dout.open_output_circuit(bit, val)
+    return counter
+
 
 while True:
     led.rgb((16, 0, 0))
-    time.sleep(0.1)
+    time.sleep(0.5)
     led.rgb((0, 0, 0))
-    time.sleep(0.1)
-    din.update()
-
-    if prev_input3 != din.get_value(3):
-        prev_input3 = din.get_value(3)
-        if prev_input3:
-            print("Input port 3 ACTIVE")
-        else:
-            print("Input port 3 inactive")
+    counter = increment_counter(counter)
+    time.sleep(0.5)
